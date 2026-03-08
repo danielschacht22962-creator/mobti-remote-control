@@ -5,6 +5,12 @@ const sections = [
   { key: 'vrVorlesung', label: 'VR Vorlesung' }
 ];
 
+const defaultConfig = {
+  url: 'https://gwxiqwswifmjkfwgenhz.supabase.co',
+  anonKey: 'sb_publishable_xQBC_KIq4s8kHN1uXhbqKQ_8jHs0nzL',
+  sessionId: 'study01'
+};
+
 const configKeys = {
   url: 'mobti_supabase_url',
   anonKey: 'mobti_supabase_anon_key',
@@ -34,9 +40,13 @@ let pollTimer = null;
 let lastSeq = -1;
 
 function loadConfig() {
-  el.supabaseUrl.value = localStorage.getItem(configKeys.url) || '';
-  el.supabaseAnonKey.value = localStorage.getItem(configKeys.anonKey) || '';
-  el.sessionId.value = localStorage.getItem(configKeys.sessionId) || 'study01';
+  const storedUrl = (localStorage.getItem(configKeys.url) || '').trim();
+  const storedAnonKey = (localStorage.getItem(configKeys.anonKey) || '').trim();
+  el.supabaseUrl.value = storedUrl.includes('supabase.co') ? storedUrl : defaultConfig.url;
+  el.supabaseAnonKey.value = storedAnonKey.startsWith('sb_publishable_') && storedAnonKey.length >= 40
+    ? storedAnonKey
+    : defaultConfig.anonKey;
+  el.sessionId.value = localStorage.getItem(configKeys.sessionId) || defaultConfig.sessionId;
 }
 
 function saveConfig() {
