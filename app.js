@@ -14,7 +14,15 @@ const defaultConfig = {
 const configKeys = {
   url: 'mobti_supabase_url',
   anonKey: 'mobti_supabase_anon_key',
-  sessionId: 'mobti_supabase_session_id'
+  sessionId: 'mobti_supabase_session_id',
+  setupCollapsed: 'mobti_setup_collapsed'
+};
+
+const modeVariants = {
+  A: { gebaeude64: 'A', wegZurMensa: 'A', inDerMensa: 'A', vrVorlesung: 'A' },
+  B: { gebaeude64: 'B', wegZurMensa: 'B', inDerMensa: 'B', vrVorlesung: 'B' },
+  ABAB: { gebaeude64: 'A', wegZurMensa: 'B', inDerMensa: 'A', vrVorlesung: 'B' },
+  BABA: { gebaeude64: 'B', wegZurMensa: 'A', inDerMensa: 'B', vrVorlesung: 'A' }
 };
 
 const el = {
@@ -23,21 +31,36 @@ const el = {
   sessionId: document.getElementById('sessionId'),
   connectBtn: document.getElementById('connectBtn'),
   saveConfigBtn: document.getElementById('saveConfigBtn'),
+  saveStateBtn: document.getElementById('saveStateBtn'),
+  saveDelaysBtn: document.getElementById('saveDelaysBtn'),
+  toggleSetupBtn: document.getElementById('toggleSetupBtn'),
+  setupPanel: document.getElementById('setupPanel'),
   status: document.getElementById('status'),
+  connectionBadge: document.getElementById('connectionBadge'),
   language: document.getElementById('language'),
   mode: document.getElementById('mode'),
-  section: document.getElementById('section'),
-  saveStateBtn: document.getElementById('saveStateBtn'),
   triggerEntryBtn: document.getElementById('triggerEntryBtn'),
   triggerArrivalBtn: document.getElementById('triggerArrivalBtn'),
-  saveDelaysBtn: document.getElementById('saveDelaysBtn'),
   delayTable: document.getElementById('delayTable'),
-  log: document.getElementById('log')
+  log: document.getElementById('log'),
+  stepCounter: document.getElementById('stepCounter'),
+  stepChips: document.getElementById('stepChips'),
+  currentStepTitle: document.getElementById('currentStepTitle'),
+  currentStepSubtitle: document.getElementById('currentStepSubtitle'),
+  currentModePill: document.getElementById('currentModePill'),
+  currentLanguagePill: document.getElementById('currentLanguagePill'),
+  currentEntryDelay: document.getElementById('currentEntryDelay'),
+  currentArrivalDelay: document.getElementById('currentArrivalDelay'),
+  prevStepBtn: document.getElementById('prevStepBtn'),
+  nextStepBtn: document.getElementById('nextStepBtn'),
+  jumpToCurrentBtn: document.getElementById('jumpToCurrentBtn'),
+  clearLogBtn: document.getElementById('clearLogBtn')
 };
 
 let connected = false;
 let pollTimer = null;
 let lastSeq = -1;
+let currentStepIndex = 0;
 
 function loadConfig() {
   const storedUrl = (localStorage.getItem(configKeys.url) || '').trim();
@@ -52,7 +75,7 @@ function loadConfig() {
 function saveConfig() {
   localStorage.setItem(configKeys.url, el.supabaseUrl.value.trim());
   localStorage.setItem(configKeys.anonKey, el.supabaseAnonKey.value.trim());
-  localStorage.setItem(configKeys.sessionId, el.sessionId.value.trim() || 'study01');
+  localStorage.setItem(configKeys.sessionId, el.sessionId.value.trim() || defaultConfig.sessionId);
   appendLog('Config saved');
 }
 
@@ -70,7 +93,16 @@ function supabaseHeaders() {
 }
 
 function sessionId() {
-  return el.sessionId.value.trim() || 'study01';
+  return el.sessionId.value.trim() || defaultConfig.sessionId;
+}
+
+function currentSection() {
+  return sections[currentStepIndex];
+}
+
+function modeForSection(sectionKey) {
+  const mode = el.mode.value || 'A';
+  return modeVariants[mode]?.[sectionKey] || 'A';
 }
 
 function renderDelayTable(delays) {
@@ -110,6 +142,17 @@ function collectDelays() {
 function appendLog(line) {
   const ts = new Date().toLocaleTimeString();
   el.log.textContent = `[${ts}] ${line}\n${el.log.textContent}`;
+}
+
+function setStatus(message, tone = 'neutral') {
+  el.status.textContent = message;
+  el.connectionBadge.textContent = tone === 'connected' ? 'Connected' : tone === 'error' ? 'Error' : 'Not connected';
+  el.connectionBadge.classList.remove('connected', 'error');
+  if (tone === 'connected') {
+    el.connectionBadge.classList.add('connected');
+  } else if (tone === 'error') {
+    el.connectionBadge.classList.add('error');
+  }
 }
 
 function validateConfig() {
@@ -165,7 +208,7 @@ function sessionPayload() {
     state: {
       language: el.language.value,
       mode: el.mode.value,
-      section: el.section.value,
+      section: currentSection().key,
       delays: collectDelays()
     }
   };
@@ -190,7 +233,7 @@ async function enqueueCommand(type) {
     p_payload: {
       language: el.language.value,
       mode: el.mode.value,
-      section: el.section.value
+      section: currentSection().key
     }
   };
 
@@ -209,15 +252,77 @@ function applySessionState(session) {
   const state = session?.state || {};
   el.language.value = state.language || 'eng';
   el.mode.value = state.mode || 'A';
-  el.section.value = state.section || 'gebaeude64';
   renderDelayTable(state.delays || {});
+
+  const index = sections.findIndex((section) => section.key === state.section);
+  currentStepIndex = index >= 0 ? index : 0;
+  updateStudyView();
+}
+
+function updateStudyView() {
+  const section = currentSection();
+  const delays = collectDelays();
+  const sectionDelays = delays[section.key] || { entryA: 8, entryB: 8, arrival: 8 };
+  const variant = modeForSection(section.key);
+  const entryDelay = variant === 'A' ? sectionDelays.entryA : sectionDelays.entryB;
+
+  el.stepCounter.textContent = `Step ${currentStepIndex + 1} / ${sections.length}`;
+  el.currentStepTitle.textContent = section.label;
+  el.currentModePill.textContent = `Mode ${variant}`;
+  el.currentLanguagePill.textContent = el.language.value;
+  el.currentEntryDelay.textContent = `${entryDelay}s`;
+  el.currentArrivalDelay.textContent = `${sectionDelays.arrival}s`;
+  el.currentStepSubtitle.textContent = variant === 'A'
+    ? 'Complex cue flow with entry and arrival cue.'
+    : 'Simple cue flow with text-only entry cue.';
+
+  el.triggerArrivalBtn.disabled = variant !== 'A' || !connected;
+  el.triggerEntryBtn.disabled = !connected;
+  el.saveStateBtn.disabled = !connected;
+  el.saveDelaysBtn.disabled = !connected;
+  el.prevStepBtn.disabled = currentStepIndex === 0;
+  el.nextStepBtn.disabled = currentStepIndex === sections.length - 1;
+
+  el.stepChips.innerHTML = '';
+  sections.forEach((step, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `step-chip${index === currentStepIndex ? ' is-active' : ''}`;
+    button.innerHTML = `
+      <span class="step-chip-index">Step ${index + 1}</span>
+      <span class="step-chip-title">${step.label}</span>
+    `;
+    button.addEventListener('click', async () => {
+      currentStepIndex = index;
+      updateStudyView();
+      if (connected) {
+        try {
+          await upsertSessionState();
+          appendLog(`Step synced to ${step.label}`);
+        } catch (error) {
+          appendLog(`Step sync failed: ${error.message}`);
+        }
+      }
+    });
+    el.stepChips.appendChild(button);
+  });
+}
+
+function setSetupCollapsed(collapsed) {
+  el.setupPanel.classList.toggle('is-collapsed', collapsed);
+  el.toggleSetupBtn.textContent = collapsed ? 'Show Setup' : 'Hide Setup';
+  localStorage.setItem(configKeys.setupCollapsed, collapsed ? '1' : '0');
+}
+
+function loadSetupCollapsed() {
+  setSetupCollapsed(localStorage.getItem(configKeys.setupCollapsed) === '1');
 }
 
 async function connect() {
   const session = await ensureSession();
   applySessionState(session);
   connected = true;
-  el.status.textContent = `Connected. Revision ${session.revision || 1}`;
+  setStatus(`Connected. Revision ${session.revision || 1}`, 'connected');
   appendLog('Connected');
 
   if (pollTimer) {
@@ -234,16 +339,24 @@ async function connect() {
         });
       }
     } catch (error) {
+      setStatus(`Poll error: ${error.message}`, 'error');
       appendLog(`Poll error: ${error.message}`);
     }
   }, 1500);
+
+  updateStudyView();
+}
+
+async function saveCurrentSetup() {
+  const session = await upsertSessionState();
+  applySessionState(session);
 }
 
 el.connectBtn.addEventListener('click', async () => {
   try {
     await connect();
   } catch (error) {
-    el.status.textContent = `Error: ${error.message}`;
+    setStatus(`Error: ${error.message}`, 'error');
     appendLog(`Connect failed: ${error.message}`);
   }
 });
@@ -254,24 +367,25 @@ el.saveConfigBtn.addEventListener('click', () => {
 
 el.saveStateBtn.addEventListener('click', async () => {
   if (!connected) {
+    appendLog('Connect the session before saving setup.');
     return;
   }
   try {
-    const session = await upsertSessionState();
-    applySessionState(session);
-    appendLog('State saved');
+    await saveCurrentSetup();
+    appendLog('Setup saved');
   } catch (error) {
-    appendLog(`Save state failed: ${error.message}`);
+    appendLog(`Save setup failed: ${error.message}`);
   }
 });
 
 el.saveDelaysBtn.addEventListener('click', async () => {
   if (!connected) {
+    appendLog('Connect the session before saving delays.');
     return;
   }
   try {
-    const session = await upsertSessionState();
-    applySessionState(session);
+    await saveCurrentSetup();
+    updateStudyView();
     appendLog('Delays saved');
   } catch (error) {
     appendLog(`Save delays failed: ${error.message}`);
@@ -280,11 +394,12 @@ el.saveDelaysBtn.addEventListener('click', async () => {
 
 el.triggerEntryBtn.addEventListener('click', async () => {
   if (!connected) {
+    appendLog('Connect the session before triggering cues.');
     return;
   }
   try {
     await enqueueCommand('trigger_entry');
-    appendLog('Triggered trigger_entry');
+    appendLog(`Entry cue triggered for ${currentSection().label}`);
   } catch (error) {
     appendLog(`Trigger failed: ${error.message}`);
   }
@@ -292,15 +407,81 @@ el.triggerEntryBtn.addEventListener('click', async () => {
 
 el.triggerArrivalBtn.addEventListener('click', async () => {
   if (!connected) {
+    appendLog('Connect the session before triggering cues.');
+    return;
+  }
+  if (modeForSection(currentSection().key) !== 'A') {
+    appendLog('Arrival cue is disabled for mode B.');
     return;
   }
   try {
     await enqueueCommand('trigger_arrival');
-    appendLog('Triggered trigger_arrival');
+    appendLog(`Arrival cue triggered for ${currentSection().label}`);
   } catch (error) {
     appendLog(`Trigger failed: ${error.message}`);
   }
 });
 
+el.prevStepBtn.addEventListener('click', async () => {
+  if (currentStepIndex === 0) {
+    return;
+  }
+  currentStepIndex -= 1;
+  updateStudyView();
+  if (connected) {
+    try {
+      await saveCurrentSetup();
+      appendLog(`Moved to ${currentSection().label}`);
+    } catch (error) {
+      appendLog(`Step sync failed: ${error.message}`);
+    }
+  }
+});
+
+el.nextStepBtn.addEventListener('click', async () => {
+  if (currentStepIndex >= sections.length - 1) {
+    return;
+  }
+  currentStepIndex += 1;
+  updateStudyView();
+  if (connected) {
+    try {
+      await saveCurrentSetup();
+      appendLog(`Moved to ${currentSection().label}`);
+    } catch (error) {
+      appendLog(`Step sync failed: ${error.message}`);
+    }
+  }
+});
+
+el.jumpToCurrentBtn.addEventListener('click', async () => {
+  if (!connected) {
+    appendLog('Connect the session before syncing the current step.');
+    return;
+  }
+  try {
+    await saveCurrentSetup();
+    appendLog(`Current step synced: ${currentSection().label}`);
+  } catch (error) {
+    appendLog(`Step sync failed: ${error.message}`);
+  }
+});
+
+el.toggleSetupBtn.addEventListener('click', () => {
+  const collapsed = !el.setupPanel.classList.contains('is-collapsed');
+  setSetupCollapsed(collapsed);
+});
+
+el.clearLogBtn.addEventListener('click', () => {
+  el.log.textContent = '';
+});
+
+el.mode.addEventListener('change', updateStudyView);
+el.language.addEventListener('change', updateStudyView);
+el.delayTable.addEventListener('input', updateStudyView);
+
 loadConfig();
 renderDelayTable({});
+loadSetupCollapsed();
+setStatus('Waiting for setup');
+updateStudyView();

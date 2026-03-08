@@ -7,80 +7,139 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <main class="app">
-    <header class="card">
-      <h1>MobTI Remote Control</h1>
-      <div class="grid two">
-        <div>
-          <label for="supabaseUrl">Supabase URL</label>
-          <input id="supabaseUrl" type="url" placeholder="https://PROJECT.supabase.co" />
-        </div>
-        <div>
-          <label for="supabaseAnonKey">Supabase Anon Key</label>
-          <input id="supabaseAnonKey" type="password" placeholder="eyJ..." />
-        </div>
+  <main class="app-shell">
+    <section class="hero card">
+      <div class="hero-copy">
+        <p class="eyebrow">Study Controller</p>
+        <h1>MobTI Remote Control</h1>
+        <p class="hero-text">Set up the session once, then run the four study steps with large mobile controls.</p>
       </div>
-      <div class="row session-row">
-        <label for="sessionId">Session ID</label>
-        <input id="sessionId" type="text" value="study01" />
-        <button id="connectBtn">Connect</button>
-      </div>
-      <div class="actions-inline">
-        <button id="saveConfigBtn">Save Config</button>
-      </div>
-      <p id="status" class="status">Not connected</p>
-    </header>
-
-    <section class="card">
-      <h2>State</h2>
-      <div class="grid two">
-        <div>
-          <label for="language">Language</label>
-          <select id="language">
-            <option value="eng">eng</option>
-            <option value="ger">ger</option>
-          </select>
-        </div>
-        <div>
-          <label for="mode">Mode</label>
-          <select id="mode">
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="ABAB">ABAB</option>
-            <option value="BABA">BABA</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label for="section">Section</label>
-        <select id="section">
-          <option value="gebaeude64">Gebaeude 64</option>
-          <option value="wegZurMensa">Weg zur Mensa</option>
-          <option value="inDerMensa">In der Mensa</option>
-          <option value="vrVorlesung">VR Vorlesung</option>
-        </select>
-      </div>
-
-      <button id="saveStateBtn">Save State</button>
-    </section>
-
-    <section class="card">
-      <h2>Triggers</h2>
-      <div class="grid two">
-        <button id="triggerEntryBtn" class="primary">Trigger Entry Cue</button>
-        <button id="triggerArrivalBtn" class="secondary">Trigger Arrival Cue</button>
+      <div class="hero-status">
+        <span class="status-pill" id="connectionBadge">Not connected</span>
+        <p id="status" class="status-text">Waiting for setup</p>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Delays (seconds)</h2>
-      <div id="delayTable"></div>
-      <button id="saveDelaysBtn">Save Delays</button>
+    <section class="card setup-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Pre-Study Setup</p>
+          <h2>Session Configuration</h2>
+        </div>
+        <button id="toggleSetupBtn" class="ghost compact" type="button">Hide Setup</button>
+      </div>
+
+      <div id="setupPanel" class="setup-panel">
+        <div class="grid two">
+          <div>
+            <label for="supabaseUrl">Supabase URL</label>
+            <input id="supabaseUrl" type="url" placeholder="https://PROJECT.supabase.co" />
+          </div>
+          <div>
+            <label for="supabaseAnonKey">Supabase Publishable Key</label>
+            <input id="supabaseAnonKey" type="password" placeholder="sb_publishable_..." />
+          </div>
+        </div>
+
+        <div class="grid three">
+          <div>
+            <label for="sessionId">Session ID</label>
+            <input id="sessionId" type="text" value="study01" />
+          </div>
+          <div>
+            <label for="language">Language</label>
+            <select id="language">
+              <option value="eng">eng</option>
+              <option value="ger">ger</option>
+            </select>
+          </div>
+          <div>
+            <label for="mode">Mode</label>
+            <select id="mode">
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="ABAB">ABAB</option>
+              <option value="BABA">BABA</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setup-actions">
+          <button id="saveConfigBtn" class="ghost" type="button">Save Config</button>
+          <button id="saveStateBtn" class="ghost" type="button">Save Setup</button>
+          <button id="connectBtn" class="primary" type="button">Connect Session</button>
+        </div>
+
+        <section class="delay-block">
+          <div class="card-header compact-header">
+            <div>
+              <p class="eyebrow">Timing</p>
+              <h3>Per-Step Delays</h3>
+            </div>
+            <button id="saveDelaysBtn" class="ghost" type="button">Save Delays</button>
+          </div>
+          <div class="delay-table-head">
+            <span>Step</span>
+            <span>Entry A</span>
+            <span>Entry B</span>
+            <span>Arrival</span>
+          </div>
+          <div id="delayTable" class="delay-table"></div>
+        </section>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Command Log</h2>
+    <section class="card flow-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Run Study</p>
+          <h2>Current Step</h2>
+        </div>
+        <div class="step-counter" id="stepCounter">Step 1 / 4</div>
+      </div>
+
+      <div id="stepChips" class="step-chips"></div>
+
+      <article class="current-step-panel">
+        <div class="step-meta-row">
+          <span class="step-mode-pill" id="currentModePill">Mode A</span>
+          <span class="step-language-pill" id="currentLanguagePill">eng</span>
+        </div>
+        <h3 id="currentStepTitle">Gebaeude 64</h3>
+        <p id="currentStepSubtitle" class="step-subtitle">Complex cue flow with entry and arrival cue.</p>
+
+        <div class="current-delays">
+          <div class="delay-chip">
+            <span class="delay-chip-label">Entry</span>
+            <strong id="currentEntryDelay">8s</strong>
+          </div>
+          <div class="delay-chip">
+            <span class="delay-chip-label">Arrival</span>
+            <strong id="currentArrivalDelay">8s</strong>
+          </div>
+        </div>
+
+        <div class="trigger-stack">
+          <button id="triggerEntryBtn" class="primary action-button" type="button">Trigger Entry Cue</button>
+          <button id="triggerArrivalBtn" class="secondary action-button" type="button">Trigger Arrival Cue</button>
+        </div>
+      </article>
+
+      <div class="study-nav">
+        <button id="prevStepBtn" class="ghost nav-button" type="button">Previous Step</button>
+        <button id="jumpToCurrentBtn" class="ghost nav-button" type="button">Sync Step</button>
+        <button id="nextStepBtn" class="primary nav-button" type="button">Next Step</button>
+      </div>
+    </section>
+
+    <section class="card log-card">
+      <div class="card-header compact-header">
+        <div>
+          <p class="eyebrow">Audit</p>
+          <h2>Command Log</h2>
+        </div>
+        <button id="clearLogBtn" class="ghost compact" type="button">Clear</button>
+      </div>
       <pre id="log" class="log"></pre>
     </section>
   </main>
