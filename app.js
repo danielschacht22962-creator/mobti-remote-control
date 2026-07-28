@@ -39,6 +39,8 @@ const el = {
   connectionBadge: document.getElementById('connectionBadge'),
   language: document.getElementById('language'),
   mode: document.getElementById('mode'),
+  engine: document.getElementById('engine'),
+  currentEnginePill: document.getElementById('currentEnginePill'),
   triggerEntryBtn: document.getElementById('triggerEntryBtn'),
   triggerArrivalBtn: document.getElementById('triggerArrivalBtn'),
   delayTable: document.getElementById('delayTable'),
@@ -228,6 +230,7 @@ function sessionPayload() {
       language: el.language.value,
       mode: el.mode.value,
       section: currentSection().key,
+      engine: el.engine.value,
       delays: collectDelays()
     }
   };
@@ -274,7 +277,8 @@ async function enqueueCommand(type) {
     p_payload: {
       language: el.language.value,
       mode: el.mode.value,
-      section: currentSection().key
+      section: currentSection().key,
+      engine: el.engine.value
     }
   };
 
@@ -320,6 +324,7 @@ function applySessionState(session) {
   const state = session?.state || {};
   el.language.value = state.language || 'eng';
   el.mode.value = state.mode || 'A';
+  el.engine.value = state.engine === 'llm' ? 'llm' : 'designed';
   renderDelayTable(state.delays || {});
 
   const index = sections.findIndex((section) => section.key === state.section);
@@ -334,17 +339,22 @@ function updateStudyView() {
   const variant = modeForSection(section.key);
   const entryDelay = variant === 'A' ? sectionDelays.entryA : sectionDelays.entryB;
 
+  const llmEngine = el.engine.value === 'llm';
   el.stepCounter.textContent = `Step ${currentStepIndex + 1} / ${sections.length}`;
   el.currentStepTitle.textContent = sectionLabel(section.key, el.language.value);
   el.currentModePill.textContent = `Mode ${variant}`;
   el.currentLanguagePill.textContent = el.language.value;
+  el.currentEnginePill.textContent = llmEngine ? 'LLM' : 'Designed';
   el.currentEntryDelay.textContent = `${entryDelay}s`;
   el.currentArrivalDelay.textContent = `${sectionDelays.arrival}s`;
-  el.currentStepSubtitle.textContent = variant === 'A'
-    ? 'Complex cue flow with entry and arrival cue.'
-    : 'Simple cue flow with text-only entry cue.';
+  el.currentStepSubtitle.textContent = llmEngine
+    ? 'LLM voice-assistant cue for entry and arrival.'
+    : variant === 'A'
+      ? 'Complex cue flow with entry and arrival cue.'
+      : 'Simple cue flow with text-only entry cue.';
 
-  el.triggerArrivalBtn.disabled = variant !== 'A' || !connected;
+  // LLM engine always has an arrival cue; the designed engine only in variant A.
+  el.triggerArrivalBtn.disabled = (!llmEngine && variant !== 'A') || !connected;
   el.triggerEntryBtn.disabled = !connected;
   el.saveStateBtn.disabled = !connected;
   el.saveDelaysBtn.disabled = !connected;
@@ -483,13 +493,15 @@ el.triggerArrivalBtn.addEventListener('click', async () => {
     appendLog('Connect the session before triggering cues.');
     return;
   }
-  if (modeForSection(currentSection().key) !== 'A') {
+  if (el.engine.value !== 'llm' && modeForSection(currentSection().key) !== 'A') {
     appendLog('Arrival cue is disabled for mode B.');
     return;
   }
   try {
     await enqueueCommand('trigger_arrival');
-    await sendArrivalPush();
+    if (el.engine.value !== 'llm') {
+      await sendArrivalPush();
+    }
     appendLog(`Arrival cue triggered for ${sectionLabel(currentSection().key, el.language.value)}`);
   } catch (error) {
     appendLog(`Trigger failed: ${error.message}`);
@@ -553,6 +565,21 @@ el.clearLogBtn.addEventListener('click', () => {
 el.mode.addEventListener('change', updateStudyView);
 el.language.addEventListener('change', updateStudyView);
 el.delayTable.addEventListener('input', updateStudyView);
+
+// Engine switch: update the view immediately and push it to the phone when connected.
+el.engine.addEventListener('change', async () => {
+  updateStudyView();
+  if (!connected) {
+    return;
+  }
+  try {
+    await upsertSessionState();
+    await enqueueCommand('set_engine');
+    appendLog(`Cue engine set to ${el.engine.value === 'llm' ? 'LLM' : 'Designed'}`);
+  } catch (error) {
+    appendLog(`Engine sync failed: ${error.message}`);
+  }
+});
 
 loadConfig();
 renderDelayTable({});
