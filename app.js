@@ -1,8 +1,8 @@
 const sections = [
-  { key: 'gebaeude64', label: 'Gebaeude 64' },
-  { key: 'wegZurMensa', label: 'Weg zur Mensa' },
-  { key: 'inDerMensa', label: 'In der Mensa' },
-  { key: 'vrVorlesung', label: 'VR Vorlesung' }
+  { key: 'gebaeude64', label: 'Building 64' },
+  { key: 'wegZurMensa', label: 'Walk to the Cafeteria' },
+  { key: 'inDerMensa', label: 'In the Cafeteria' },
+  { key: 'vrVorlesung', label: 'VR Lecture' }
 ];
 
 const defaultConfig = {
@@ -62,6 +62,25 @@ let pollTimer = null;
 let lastSeq = -1;
 let currentStepIndex = 0;
 
+function sectionLabel(sectionKey, language = (el.language?.value || 'eng')) {
+  const labels = {
+    eng: {
+      gebaeude64: 'Building 64',
+      wegZurMensa: 'Walk to the Cafeteria',
+      inDerMensa: 'In the Cafeteria',
+      vrVorlesung: 'VR Lecture'
+    },
+    ger: {
+      gebaeude64: 'Gebäude 64',
+      wegZurMensa: 'Weg zur Mensa',
+      inDerMensa: 'In der Mensa',
+      vrVorlesung: 'VR Vorlesung'
+    }
+  };
+
+  return labels[language]?.[sectionKey] || labels.eng[sectionKey] || sectionKey;
+}
+
 function loadConfig() {
   const storedUrl = (localStorage.getItem(configKeys.url) || '').trim();
   const storedAnonKey = (localStorage.getItem(configKeys.anonKey) || '').trim();
@@ -112,7 +131,7 @@ function renderDelayTable(delays) {
     const row = document.createElement('div');
     row.className = 'delay-row';
     row.innerHTML = `
-      <div class="section-name">${section.label}</div>
+      <div class="section-name">${sectionLabel(section.key)}</div>
       <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="entryA" value="${delays?.[section.key]?.entryA ?? 8}" />
       <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="entryB" value="${delays?.[section.key]?.entryB ?? 8}" />
       <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="arrival" value="${delays?.[section.key]?.arrival ?? 8}" />
@@ -214,6 +233,28 @@ function sessionPayload() {
   };
 }
 
+function arrivalMessage() {
+  const section = currentSection().key;
+  const language = el.language.value;
+
+  const messages = {
+    eng: {
+      gebaeude64: 'You reached your destination and have 5 minutes till your lecture begins',
+      wegZurMensa: 'Your friend already got his food and is waiting at a table',
+      inDerMensa: 'Your meal is already paid for, you can pick it up at counter 1',
+      vrVorlesung: 'Your friend is using the restroom and wants you to wait for him'
+    },
+    ger: {
+      gebaeude64: 'Du hast dein Ziel erreicht und hast noch 5 Minuten bis deine Vorlesung beginnt',
+      wegZurMensa: 'Dein Freund hat schon sein Essen und wartet an einem Tisch',
+      inDerMensa: 'Dein Essen ist bereits bezahlt, du kannst es an Theke 1 abholen',
+      vrVorlesung: 'Dein Freund ist auf der Toilette und möchte, dass du auf ihn wartest'
+    }
+  };
+
+  return messages[language]?.[section] || messages.eng[section];
+}
+
 async function upsertSessionState() {
   const payload = sessionPayload();
   const json = await apiFetch('/rest/v1/sessions?on_conflict=session_id', {
@@ -243,6 +284,33 @@ async function enqueueCommand(type) {
   });
 }
 
+async function sendArrivalPush() {
+  const response = await fetch('/api/send-arrival', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      sessionId: sessionId(),
+      title: el.language.value === 'ger' ? 'Ankunftshinweis' : 'Arrival Cue',
+      body: arrivalMessage(),
+      data: {
+        type: 'arrival_cue',
+        section: currentSection().key,
+        mode: el.mode.value,
+        language: el.language.value
+      }
+    })
+  });
+
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || !json.ok) {
+    throw new Error(json.error || `Push HTTP ${response.status}`);
+  }
+
+  return json;
+}
+
 async function fetchCommands() {
   const query = `/rest/v1/commands?session_id=eq.${encodeURIComponent(sessionId())}&seq=gt.${lastSeq}&select=id,seq,type,payload,acked_at,ack_by&order=seq.asc`;
   return apiFetch(query, { method: 'GET' });
@@ -267,7 +335,7 @@ function updateStudyView() {
   const entryDelay = variant === 'A' ? sectionDelays.entryA : sectionDelays.entryB;
 
   el.stepCounter.textContent = `Step ${currentStepIndex + 1} / ${sections.length}`;
-  el.currentStepTitle.textContent = section.label;
+  el.currentStepTitle.textContent = sectionLabel(section.key, el.language.value);
   el.currentModePill.textContent = `Mode ${variant}`;
   el.currentLanguagePill.textContent = el.language.value;
   el.currentEntryDelay.textContent = `${entryDelay}s`;
@@ -290,7 +358,7 @@ function updateStudyView() {
     button.className = `step-chip${index === currentStepIndex ? ' is-active' : ''}`;
     button.innerHTML = `
       <span class="step-chip-index">Step ${index + 1}</span>
-      <span class="step-chip-title">${step.label}</span>
+      <span class="step-chip-title">${sectionLabel(step.key, el.language.value)}</span>
     `;
     button.addEventListener('click', async () => {
       currentStepIndex = index;
@@ -298,7 +366,7 @@ function updateStudyView() {
       if (connected) {
         try {
           await upsertSessionState();
-          appendLog(`Step synced to ${step.label}`);
+          appendLog(`Step synced to ${sectionLabel(step.key, el.language.value)}`);
         } catch (error) {
           appendLog(`Step sync failed: ${error.message}`);
         }
@@ -378,6 +446,11 @@ el.saveStateBtn.addEventListener('click', async () => {
   }
 });
 
+el.language.addEventListener('change', () => {
+  renderDelayTable(collectDelays());
+  updateStudyView();
+});
+
 el.saveDelaysBtn.addEventListener('click', async () => {
   if (!connected) {
     appendLog('Connect the session before saving delays.');
@@ -399,7 +472,7 @@ el.triggerEntryBtn.addEventListener('click', async () => {
   }
   try {
     await enqueueCommand('trigger_entry');
-    appendLog(`Entry cue triggered for ${currentSection().label}`);
+    appendLog(`Entry cue triggered for ${sectionLabel(currentSection().key, el.language.value)}`);
   } catch (error) {
     appendLog(`Trigger failed: ${error.message}`);
   }
@@ -416,7 +489,8 @@ el.triggerArrivalBtn.addEventListener('click', async () => {
   }
   try {
     await enqueueCommand('trigger_arrival');
-    appendLog(`Arrival cue triggered for ${currentSection().label}`);
+    await sendArrivalPush();
+    appendLog(`Arrival cue triggered for ${sectionLabel(currentSection().key, el.language.value)}`);
   } catch (error) {
     appendLog(`Trigger failed: ${error.message}`);
   }
@@ -431,7 +505,7 @@ el.prevStepBtn.addEventListener('click', async () => {
   if (connected) {
     try {
       await saveCurrentSetup();
-      appendLog(`Moved to ${currentSection().label}`);
+      appendLog(`Moved to ${sectionLabel(currentSection().key, el.language.value)}`);
     } catch (error) {
       appendLog(`Step sync failed: ${error.message}`);
     }
@@ -447,7 +521,7 @@ el.nextStepBtn.addEventListener('click', async () => {
   if (connected) {
     try {
       await saveCurrentSetup();
-      appendLog(`Moved to ${currentSection().label}`);
+      appendLog(`Moved to ${sectionLabel(currentSection().key, el.language.value)}`);
     } catch (error) {
       appendLog(`Step sync failed: ${error.message}`);
     }
@@ -461,7 +535,7 @@ el.jumpToCurrentBtn.addEventListener('click', async () => {
   }
   try {
     await saveCurrentSetup();
-    appendLog(`Current step synced: ${currentSection().label}`);
+    appendLog(`Current step synced: ${sectionLabel(currentSection().key, el.language.value)}`);
   } catch (error) {
     appendLog(`Step sync failed: ${error.message}`);
   }
