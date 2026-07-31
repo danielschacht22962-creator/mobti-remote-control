@@ -42,6 +42,7 @@ const el = {
   connectionBadge: document.getElementById('connectionBadge'),
   language: document.getElementById('language'),
   mode: document.getElementById('mode'),
+  modeField: document.getElementById('modeField'),
   engine: document.getElementById('engine'),
   currentEnginePill: document.getElementById('currentEnginePill'),
   triggerEntryBtn: document.getElementById('triggerEntryBtn'),
@@ -345,6 +346,9 @@ function updateStudyView() {
   const llmEngine = el.engine.value === 'llm';
   el.stepCounter.textContent = `Step ${currentStepIndex + 1} / ${sections.length}`;
   el.currentStepTitle.textContent = sectionLabel(section.key, el.language.value);
+  // A/B variants only exist for the designed cues — hide Mode entirely in LLM mode.
+  if (el.modeField) el.modeField.style.display = llmEngine ? 'none' : '';
+  el.currentModePill.style.display = llmEngine ? 'none' : '';
   el.currentModePill.textContent = `Mode ${variant}`;
   el.currentLanguagePill.textContent = el.language.value;
   el.currentEnginePill.textContent = llmEngine ? 'LLM' : 'Designed';
@@ -459,10 +463,22 @@ el.saveStateBtn.addEventListener('click', async () => {
   }
 });
 
-el.language.addEventListener('change', () => {
-  renderDelayTable(collectDelays());
+// Push a setup change to the phone right away: save the session state, then send the
+// matching command so the app applies it without waiting for "Save Setup".
+async function pushSetting(commandType, label) {
   updateStudyView();
-});
+  if (!connected) {
+    appendLog(`${label} (connect the session to send it to the phone)`);
+    return;
+  }
+  try {
+    await upsertSessionState();
+    await enqueueCommand(commandType);
+    appendLog(label);
+  } catch (error) {
+    appendLog(`${label} failed: ${error.message}`);
+  }
+}
 
 el.saveDelaysBtn.addEventListener('click', async () => {
   if (!connected) {
@@ -565,23 +581,20 @@ el.clearLogBtn.addEventListener('click', () => {
   el.log.textContent = '';
 });
 
-el.mode.addEventListener('change', updateStudyView);
-el.language.addEventListener('change', updateStudyView);
 el.delayTable.addEventListener('input', updateStudyView);
 
-// Engine switch: update the view immediately and push it to the phone when connected.
-el.engine.addEventListener('change', async () => {
-  updateStudyView();
-  if (!connected) {
-    return;
-  }
-  try {
-    await upsertSessionState();
-    await enqueueCommand('set_engine');
-    appendLog(`Cue engine set to ${el.engine.value === 'llm' ? 'LLM' : 'Designed'}`);
-  } catch (error) {
-    appendLog(`Engine sync failed: ${error.message}`);
-  }
+// Setup changes take effect on the phone immediately (no "Save Setup" needed).
+el.language.addEventListener('change', () => {
+  renderDelayTable(collectDelays());
+  pushSetting('set_language', `Language set to ${el.language.value}`);
+});
+
+el.mode.addEventListener('change', () => {
+  pushSetting('set_mode', `Mode set to ${el.mode.value}`);
+});
+
+el.engine.addEventListener('change', () => {
+  pushSetting('set_engine', `Cue engine set to ${el.engine.value === 'llm' ? 'LLM' : 'Designed'}`);
 });
 
 loadConfig();
