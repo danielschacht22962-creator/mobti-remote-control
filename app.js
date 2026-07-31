@@ -25,6 +25,9 @@ const modeVariants = {
   BABA: { gebaeude64: 'B', wegZurMensa: 'A', inDerMensa: 'B', vrVorlesung: 'A' }
 };
 
+// Standardized cue delay (seconds) — identical on the phone and in the web remote.
+const DEFAULT_CUE_DELAY = 1;
+
 const el = {
   supabaseUrl: document.getElementById('supabaseUrl'),
   supabaseAnonKey: document.getElementById('supabaseAnonKey'),
@@ -134,9 +137,9 @@ function renderDelayTable(delays) {
     row.className = 'delay-row';
     row.innerHTML = `
       <div class="section-name">${sectionLabel(section.key)}</div>
-      <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="entryA" value="${delays?.[section.key]?.entryA ?? 8}" />
-      <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="entryB" value="${delays?.[section.key]?.entryB ?? 8}" />
-      <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="arrival" value="${delays?.[section.key]?.arrival ?? 8}" />
+      <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="entryA" value="${delays?.[section.key]?.entryA ?? DEFAULT_CUE_DELAY}" />
+      <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="entryB" value="${delays?.[section.key]?.entryB ?? DEFAULT_CUE_DELAY}" />
+      <input type="number" min="0" step="1" data-delay-section="${section.key}" data-delay-type="arrival" value="${delays?.[section.key]?.arrival ?? DEFAULT_CUE_DELAY}" />
     `;
     el.delayTable.appendChild(row);
   });
@@ -145,7 +148,7 @@ function renderDelayTable(delays) {
 function collectDelays() {
   const result = {};
   sections.forEach((section) => {
-    result[section.key] = { entryA: 8, entryB: 8, arrival: 8 };
+    result[section.key] = { entryA: DEFAULT_CUE_DELAY, entryB: DEFAULT_CUE_DELAY, arrival: DEFAULT_CUE_DELAY };
   });
 
   document.querySelectorAll('[data-delay-section]').forEach((input) => {
@@ -335,7 +338,7 @@ function applySessionState(session) {
 function updateStudyView() {
   const section = currentSection();
   const delays = collectDelays();
-  const sectionDelays = delays[section.key] || { entryA: 8, entryB: 8, arrival: 8 };
+  const sectionDelays = delays[section.key] || { entryA: DEFAULT_CUE_DELAY, entryB: DEFAULT_CUE_DELAY, arrival: DEFAULT_CUE_DELAY };
   const variant = modeForSection(section.key);
   const entryDelay = variant === 'A' ? sectionDelays.entryA : sectionDelays.entryB;
 
