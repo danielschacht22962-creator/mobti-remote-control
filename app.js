@@ -22,8 +22,17 @@ const modeVariants = {
   A: { gebaeude64: 'A', wegZurMensa: 'A', inDerMensa: 'A', vrVorlesung: 'A' },
   B: { gebaeude64: 'B', wegZurMensa: 'B', inDerMensa: 'B', vrVorlesung: 'B' },
   ABAB: { gebaeude64: 'A', wegZurMensa: 'B', inDerMensa: 'A', vrVorlesung: 'B' },
-  BABA: { gebaeude64: 'B', wegZurMensa: 'A', inDerMensa: 'B', vrVorlesung: 'A' }
+  BABA: { gebaeude64: 'B', wegZurMensa: 'A', inDerMensa: 'B', vrVorlesung: 'A' },
+  C: { gebaeude64: 'C', wegZurMensa: 'C', inDerMensa: 'C', vrVorlesung: 'C' }
 };
+
+// C is A with one blue base colour, the blue headset animation everywhere, and only the
+// Building 64 arrival cue — so the arrival trigger is live for that section alone.
+function arrivalAvailable(variant, sectionKey) {
+  if (variant === 'A') return true;
+  if (variant === 'C') return sectionKey === 'gebaeude64';
+  return false;
+}
 
 // Standardized cue delay (seconds) — identical on the phone and in the web remote.
 const DEFAULT_CUE_DELAY = 1;
@@ -358,10 +367,13 @@ function updateStudyView() {
     ? 'LLM voice-assistant cue for entry and arrival.'
     : variant === 'A'
       ? 'Complex cue flow with entry and arrival cue.'
-      : 'Simple cue flow with text-only entry cue.';
+      : variant === 'C'
+        ? 'Like A, but all blue and only the Building 64 arrival cue.'
+        : 'Simple cue flow with text-only entry cue.';
 
-  // LLM engine always has an arrival cue; the designed engine only in variant A.
-  el.triggerArrivalBtn.disabled = (!llmEngine && variant !== 'A') || !connected;
+  // LLM always has an arrival cue; designed only in A, and in C only for Building 64.
+  el.triggerArrivalBtn.disabled =
+    (!llmEngine && !arrivalAvailable(variant, currentSection().key)) || !connected;
   el.triggerEntryBtn.disabled = !connected;
   el.saveStateBtn.disabled = !connected;
   el.saveDelaysBtn.disabled = !connected;
@@ -512,8 +524,11 @@ el.triggerArrivalBtn.addEventListener('click', async () => {
     appendLog('Connect the session before triggering cues.');
     return;
   }
-  if (el.engine.value !== 'llm' && modeForSection(currentSection().key) !== 'A') {
-    appendLog('Arrival cue is disabled for mode B.');
+  if (el.engine.value !== 'llm'
+      && !arrivalAvailable(modeForSection(currentSection().key), currentSection().key)) {
+    appendLog(modeForSection(currentSection().key) === 'C'
+      ? 'Mode C only has an arrival cue in Building 64.'
+      : 'Arrival cue is disabled for mode B.');
     return;
   }
   try {
