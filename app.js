@@ -35,7 +35,7 @@ function arrivalAvailable(variant, sectionKey) {
 }
 
 // Standardized cue delay (seconds) — identical on the phone and in the web remote.
-const DEFAULT_CUE_DELAY = 1;
+const DEFAULT_CUE_DELAY = 0;
 
 const el = {
   supabaseUrl: document.getElementById('supabaseUrl'),
