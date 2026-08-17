@@ -37,6 +37,11 @@ function arrivalAvailable(variant, sectionKey) {
 // Standardized cue delay (seconds) — identical on the phone and in the web remote.
 const DEFAULT_CUE_DELAY = 0;
 
+// Bumped when the standard delay changes. Delays stored in the Supabase session under an
+// older version are ignored, so a session that still holds 8s from a previous study starts
+// at 0 again instead of resurrecting the old values on both clients.
+const DELAY_STANDARD_VERSION = 3;
+
 const el = {
   supabaseUrl: document.getElementById('supabaseUrl'),
   supabaseAnonKey: document.getElementById('supabaseAnonKey'),
@@ -244,7 +249,8 @@ function sessionPayload() {
       mode: el.mode.value,
       section: currentSection().key,
       engine: el.engine.value,
-      delays: collectDelays()
+      delays: collectDelays(),
+      delayVersion: DELAY_STANDARD_VERSION
     }
   };
 }
@@ -338,7 +344,8 @@ function applySessionState(session) {
   el.language.value = state.language || 'eng';
   el.mode.value = state.mode || 'A';
   el.engine.value = state.engine === 'llm' ? 'llm' : 'designed';
-  renderDelayTable(state.delays || {});
+  const storedDelayVersion = Number(state.delayVersion || 0);
+  renderDelayTable(storedDelayVersion >= DELAY_STANDARD_VERSION ? (state.delays || {}) : {});
 
   const index = sections.findIndex((section) => section.key === state.section);
   currentStepIndex = index >= 0 ? index : 0;
